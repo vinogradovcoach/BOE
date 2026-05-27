@@ -35,8 +35,8 @@
     .toolbar input,.toolbar select{background:#0b1220;color:var(--text);border:1px solid #334155;border-radius:10px;padding:8px;font-size:12px;min-width:150px}
     #viewport{position:relative;min-height:0;flex:1;background:radial-gradient(circle at 50% 20%,#172033 0,#0b1020 70%);}
     #three{width:100%;height:100%;display:block}
-    #hud{position:absolute;left:12px;top:12px;max-width:520px;background:rgba(15,23,42,.86);border:1px solid rgba(148,163,184,.35);border-radius:12px;padding:10px;font-size:12px;line-height:1.35;backdrop-filter:blur(6px)}
-    #statusLine{position:absolute;left:12px;bottom:12px;right:12px;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.35);border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.35;backdrop-filter:blur(6px)}
+    #sceneInfo{border-top:1px solid var(--line);background:#0f172a;display:grid;grid-template-columns:1.15fr .85fr;gap:10px;padding:10px}
+    #hud,#statusLine{position:static;max-width:none;background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:12px;padding:10px;font-size:12px;line-height:1.35}
     .summary{border-top:1px solid var(--line);padding:10px;background:#0f172a;font-size:12px;line-height:1.45}
     .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
     .summary-grid div{background:#0b1220;border:1px solid #253044;border-radius:10px;padding:8px}
@@ -60,12 +60,8 @@
     .warning-line{color:#fecaca}
     .ok-line{color:#bbf7d0}
     .split{display:flex;gap:6px;align-items:center;justify-content:space-between}
-    .dimension-editor{display:grid;grid-template-columns:1fr 86px;gap:6px;align-items:center;margin-top:8px;padding:8px;border:1px solid #334155;border-radius:10px;background:#0b1220}
-    .dimension-editor label{font-size:11px;color:var(--muted)}
-    .dimension-editor input{width:86px;background:#111827;color:var(--text);border:1px solid #334155;border-radius:8px;padding:6px;font-size:12px}
-    .role-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:#0b1220;border:1px solid #334155;margin-right:5px;font-size:13px}
     .hidden{display:none!important}
-    @media (max-width:1100px){#app{grid-template-columns:1fr;height:auto}.panel{min-height:360px}#viewport{height:520px}.right{order:3}.left{order:2}.center{order:1}}
+    @media (max-width:1100px){#app{grid-template-columns:1fr;height:auto}.panel{min-height:360px}#viewport{height:520px}#sceneInfo{grid-template-columns:1fr}.right{order:3}.left{order:2}.center{order:1}}
   </style>
   <script type="importmap">
     {"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
@@ -74,7 +70,7 @@
 <body>
   <header>
     <h1>Truck Sports & Wellness Module Layout Simulator</h1>
-    <div class="meta">Interior: 4000 × 2360 × 2000 mm. Front door: 688 mm, offset 688 mm left / 984 mm right. Rear wall: outward-opening loading wall.</div>
+    <div class="meta">Sports module: 4000 × 2360 × 2100 mm. Front door to living quarters: 984 mm, offset 688 mm left / 688 mm right. Living quarters concept added: shower/toilet, bed, closets, kitchen.</div>
   </header>
 
   <main id="app">
@@ -91,19 +87,21 @@
     </section>
 
     <section class="panel center">
-      <h2>3D truck interior</h2>
+      <h2>3D truck + living quarters</h2>
       <div id="viewport">
         <canvas id="three"></canvas>
+      </div>
+      <div id="sceneInfo">
         <div id="hud">
           <strong>Controls</strong><br>
-          Left-click the solid body of an item to select and drag it on the floor. Small labels/icons are ignored by the picker, so the intended object should move even in dense layouts. Use mouse wheel/right-drag to orbit.<br>
+          Left-click an item to select and drag it on the floor. Wall-mounted ski ergometers are shown under the ceiling and keep their high mounting. Use mouse wheel/right-drag to orbit. Select an item in the left panel for actions.<br>
           <div class="legend">
             <span><i class="swatch" style="background:#60a5fa"></i>front door clearance</span>
             <span><i class="swatch" style="background:#f97316"></i>rear loading caution zone</span>
             <span><i class="swatch" style="background:#ef4444"></i>invalid / overheight warning</span>
           </div>
         </div>
-        <div id="statusLine">No equipment installed yet.</div>
+        <div id="statusLine">No sports equipment installed yet. Living quarters are shown as fixed reference geometry.</div>
       </div>
     </section>
 
@@ -125,31 +123,28 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    const TRUCK = { length: 4000, width: 2360, height: 2000 };
+    const TRUCK = { length: 4000, width: 2360, height: 2100 };
+    const LIVING = { length: 2960, width: 2360, height: 2100 }; // scheme-derived conceptual living section: 600 + 840 + 1520 mm
     const DOOR = {
       x1: -TRUCK.width/2 + 688,
-      x2: -TRUCK.width/2 + 688 + 688,
+      x2: -TRUCK.width/2 + 688 + 984,
       z1: -TRUCK.length/2,
       z2: -TRUCK.length/2 + 900,
-      width: 688,
+      width: 984,
       clearDepth: 900
     };
     const REAR_CAUTION = { x1: -TRUCK.width/2, x2: TRUCK.width/2, z1: TRUCK.length/2 - 300, z2: TRUCK.length/2 };
     const SCALE = 0.001; // mm to Three.js metres
     const MARGIN = 35;
 
-    const catalog = [
+    let catalog = [
+      {id:'bjorndalen_hbot', category:'Hyperbaric Chamber', name:'Bjørndalen arched hyperbaric chamber', dims:[1800,960,1860], shape:'archedChamber', weightKg:450, powerW:null, priceUsd:null, priceLabel:'Unknown / TBD', link:'#', purpose:'Heavy arched hard-shell hyperbaric chamber with separate compressor/service equipment.', notes:'Custom model from the provided sketch. Body dimensions: H 1860 × W 960 × L 1800 mm. Three service boxes are modeled as a compact end-mounted bank, staying inside the chamber width.', serviceBoxes:[{name:'Compressor / service box 1', dims:[590,510,380]},{name:'Service box 2', dims:[425,655,940]},{name:'Service box 3', dims:[420,680,760]}]},
       {id:'hpo_trojan', category:'Hyperbaric Chamber', name:'HPO Tech Trojan', dims:[2350,900,1090], shape:'cylinder', weightKg:46, powerW:1250, priceUsd:null, priceLabel:'Custom B2B quote', link:'https://hpotech.com', purpose:'Monoplace hyperbaric exposure for recovery/longevity programs.', notes:'Width/diameter is estimated at 900 mm because the uploaded specification gives length and height only.'},
-      {id:'hpo_petra', category:'Hyperbaric Chamber', name:'HPO Tech Petra', dims:[2500,1000,1350], shape:'cylinder', weightKg:null, powerW:1500, priceUsd:null, priceLabel:'Custom B2B quote', link:'https://hpotech.com', purpose:'Monoplace chamber with large retractable acrylic front panel for mobility access.', notes:'Exact footprint requires manufacturer consultation; simulator uses conservative placeholder dimensions.'},
-      {id:'hpo_zeugma', category:'Hyperbaric Chamber', name:'HPO Tech Zeugma', dims:[1344,1987,1858], shape:'cylinder', weightKg:750, powerW:2500, priceUsd:null, priceLabel:'Custom B2B quote', link:'https://hpotech.com', purpose:'Hard-shell hyperbaric chamber, larger-capacity clinical/longevity use.', notes:'Manufacturer minimum installation floor is 5500 × 2800 mm, exceeding this truck interior.'},
-      {id:'hpo_matrix', category:'Hyperbaric Chamber', name:'HPO Tech Matrix', dims:[1750,1600,1800], shape:'cylinder', weightKg:null, powerW:2500, priceUsd:null, priceLabel:'Custom B2B quote', link:'https://hpotech.com', purpose:'Multiplace hard-shell hyperbaric chamber, 1.5–3 bar absolute configuration.', notes:'Width is estimated; exact multiplace configuration must be confirmed before procurement.'},
       {id:'hero_composite', category:'Hyperbaric Chamber', name:'HERO Composite Hard Shell Chamber 2.0 ATA', dims:[2300,900,900], shape:'cylinder', weightKg:281, powerW:2000, priceUsd:23900, priceLabel:'~$23,900', link:'https://herolifecare.com', purpose:'Hard-shell lying hyperbaric chamber with 3-in-1 concentrator/compressor unit.', notes:'Weight includes approximated chamber and 88 kg peripheral unit; plan a separate service position for the 400 × 470 × 1070 mm concentrator/compressor.'},
       {id:'oxyrevo_quest36', category:'Hyperbaric Chamber', name:'OxyRevo Quest36 Lying Type Chamber 2.0 ATA', dims:[2200,900,900], shape:'cylinder', weightKg:260, powerW:1800, priceUsd:35000, priceLabel:'~$35,000', link:'https://oxyrevo.com', purpose:'Hard-shell lying chamber for recovery/longevity use.', notes:'Peripheral compressor/oxygen/cooling units need ventilation and maintenance access.'},
 
       {id:'assault_treadmill', category:'Treadmill', name:'AssaultFitness AirRunner / curved manual treadmill', dims:[1770,841,1626], shape:'box', weightKg:127, powerW:0, priceUsd:2999, priceLabel:'~$2,999', link:'https://www.assaultfitness.com', purpose:'Non-motorized running gait and metabolic conditioning treadmill.'},
 
-      {id:'bodycraft_cable', category:'Cable Strength Training Tower', name:'BodyCraft Cable Pull Station', dims:[1400,1000,2100], shape:'box', weightKg:135, powerW:0, priceUsd:2500, priceLabel:'~$2,000–$3,000', link:'https://bodycraft.com', purpose:'Cable strength and rehabilitation exercise station.', notes:'Height exceeds the 2000 mm truck ceiling and must be redesigned, recessed, or excluded.'},
-      {id:'functional_trainer_2000', category:'Cable Strength Training Tower', name:'Functional Trainer Weight Stack Cable Tower 2000', dims:[1120,1780,2180], shape:'box', weightKg:325, powerW:0, priceUsd:3000, priceLabel:'~$2,500–$3,500', link:'#', purpose:'Dual-stack cable strength station.', notes:'Height exceeds the 2000 mm truck ceiling and the footprint is heavy for a mobile installation.'},
       {id:'extreme_single_cable', category:'Cable Strength Training Tower', name:'Extreme Fitness Single Cable Tower', dims:[720,720,2060], shape:'box', weightKg:140, powerW:0, priceUsd:1450, priceLabel:'~$1,200–$1,700', link:'https://extremefitness.co.uk', purpose:'Compact cable strength station; wall-mounted variants are preferable.', notes:'Height still exceeds the 2000 mm truck ceiling. It is the least bad cable-tower option but not fit without modification.'},
 
       {id:'shelves', category:'Shelves', name:'Modular shelves for small devices', dims:[1000,450,1800], shape:'box', weightKg:40, powerW:0, priceUsd:600, priceLabel:'Engineering allowance ~$600', link:'#', purpose:'Storage for gas analyzer, compression system, masks, accessories, cleaning supplies and consumables.', notes:'Placeholder engineering allowance. Final shelving must be crash-rated and bolted to floor/wall rails.'},
@@ -168,37 +163,19 @@
 
       {id:'ercolina_ski', category:'Ski ergometer', name:'Ercolina Upper Body Power Ski Ergometer', dims:[730,300,280], shape:'box', weightKg:11, powerW:0, priceUsd:1699, priceLabel:'~$1,699', link:'https://www.ercolina.com', purpose:'Compact wall-mounted ski/upper-body ergometry.', wallMounted:true, forbiddenRear:true},
       {id:'concept2_skierg_wall', category:'Ski ergometer', name:'Concept2 SkiErg wall-mounted', dims:[520,406,2160], shape:'box', weightKg:20.9, powerW:0, priceUsd:850, priceLabel:'~$850 machine only', link:'https://www.concept2.com', purpose:'Wall-mounted ski ergometer with PM5 monitor.', wallMounted:true, forbiddenRear:true, notes:'Height exceeds 2000 mm ceiling; fit requires floor recess, roof clearance, lower mounting, or a different ergometer.'},
-      {id:'concept2_skierg_stand', category:'Ski ergometer', name:'Concept2 SkiErg with floor stand', dims:[1270,600,2160], shape:'box', weightKg:36.9, powerW:0, priceUsd:1100, priceLabel:'~$1,100 with stand', link:'https://www.concept2.com', purpose:'Ski ergometer with freestanding base.', notes:'Height exceeds 2000 mm ceiling; not recommended for this truck.'},
 
       {id:'vald_forcedecks_mini', category:'Neuromuscular Compact Platform', name:'VALD ForceDecks Mini', dims:[450,400,42], shape:'box', weightKg:10, powerW:0, priceUsd:null, priceLabel:'Custom B2B quote', link:'https://valdperformance.com', purpose:'Compact dual force plates for neuromuscular testing and monitoring.'}
     ];
+
 
     const categoryColor = new Map();
     const palette = ['#38bdf8','#a78bfa','#f472b6','#fb7185','#f59e0b','#84cc16','#22c55e','#14b8a6','#60a5fa','#c084fc','#facc15','#94a3b8'];
     [...new Set(catalog.map(i=>i.category))].forEach((cat,i)=>categoryColor.set(cat,palette[i%palette.length]));
 
-    const roleIcons = {
-      'Hyperbaric Chamber':'O₂',
-      'Treadmill':'RUN',
-      'Cable Strength Training Tower':'STR',
-      'Shelves':'STO',
-      'Indoor cycling bike':'BIK',
-      'IR Capsule':'IR',
-      'Portable gas analyzer':'GAS',
-      'Local cryotherapy device':'ICE',
-      'Pneumatic compression device':'CMP',
-      'Yoga Mat and Bodyweight Strength Training':'MAT',
-      'Hypoxicator':'HYX',
-      'Ski ergometer':'SKI',
-      'Neuromuscular Compact Platform':'NMP'
-    };
-    function roleIcon(item){ return roleIcons[item.category] || 'EQ'; }
-
     let placed = [];
     let nextId = 1;
     let selectedId = null;
     let dragging = false;
-    let draggingId = null;
     let dragOffset = new THREE.Vector3();
     let dragStart = null;
     const meshToId = new Map();
@@ -207,11 +184,11 @@
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1020);
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 20);
-    camera.position.set(3.2, 2.8, 4.6);
+    camera.position.set(4.2, 3.1, 4.6);
     const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, .6, 0);
+    controls.target.set(0, .75, -1.25);
     controls.enableDamping = true;
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.25));
@@ -293,7 +270,69 @@
     }
     function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
+    function addFixture(name, x, z, sx, sz, h, color=0xffffff, opacity=.78, icon=''){
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(m(sx), m(h), m(sz)), mat(color, opacity));
+      mesh.position.set(m(x), m(h/2), m(z));
+      scene.add(mesh);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color:0xe5e7eb, transparent:true, opacity:.45}));
+      mesh.add(edges);
+      const label = makeLabel(`${icon ? icon + ' ' : ''}${name}`, '#0f172a', 'rgba(255,255,255,.82)');
+      label.position.set(0, m(h)+.12, 0);
+      mesh.add(label);
+      return mesh;
+    }
+
+    function addCylinderFixture(name, x, z, radius, h, color=0xffffff, opacity=.78, icon=''){
+      const geo = new THREE.CylinderGeometry(m(radius), m(radius), m(h), 32);
+      const mesh = new THREE.Mesh(geo, mat(color, opacity));
+      mesh.position.set(m(x), m(h/2), m(z));
+      scene.add(mesh);
+      const label = makeLabel(`${icon ? icon + ' ' : ''}${name}`, '#0f172a', 'rgba(255,255,255,.82)');
+      label.position.set(0, m(h)+.12, 0);
+      mesh.add(label);
+      return mesh;
+    }
+
+    function addLivingGeometry(){
+      const w = m(LIVING.width), l = m(LIVING.length), h = m(LIVING.height);
+      const livingFront = -TRUCK.length/2 - LIVING.length;
+      const livingBack = -TRUCK.length/2;
+      const centerZ = (livingFront + livingBack) / 2;
+      const wallMat = mat(0xf8fafc,.18);
+      const sideThick = .035;
+
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(w, .015, l), mat(0xf8fafc,.38));
+      floor.position.set(0, -0.006, m(centerZ)); scene.add(floor);
+
+      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(sideThick,h,l), wallMat);
+      leftWall.position.set(-w/2, h/2, m(centerZ)); scene.add(leftWall);
+      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(sideThick,h,l), wallMat);
+      rightWall.position.set(w/2, h/2, m(centerZ)); scene.add(rightWall);
+      const frontWall = new THREE.Mesh(new THREE.BoxGeometry(w,h,sideThick), wallMat);
+      frontWall.position.set(0, h/2, m(livingFront)); scene.add(frontWall);
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(w,.012,l), mat(0xffffff,.06));
+      ceiling.position.set(0,h,m(centerZ)); scene.add(ceiling);
+
+      // Door approach in the living section, aligned with the sports-module door.
+      addZone({x1:DOOR.x1, x2:DOOR.x2, z1:livingBack-760, z2:livingBack}, 0x60a5fa, .22, 'Door approach');
+
+      // Scheme-based conceptual built-ins. These are static living-module fixtures, not movable equipment.
+      addFixture('Kitchen', -910, -3280, 540, 1520, 900, 0x111827, .88, '🍳');
+      addFixture('Closets', 900, -3780, 520, 1540, 1950, 0xe2e8f0, .78, '▦');
+      addFixture('Toilet + shower', 725, -2525, 910, 1050, 2050, 0xbfdbfe, .38, '🚿');
+      addCylinderFixture('WC', 760, -2380, 150, 460, 0xffffff, .86, '');
+      addFixture('Shower tray', 630, -2720, 620, 520, 90, 0xe0f2fe, .72, '');
+      addFixture('Raised bed', -300, -4540, 1760, 760, 690, 0xd6d3d1, .86, '🛏');
+      addFixture('Under-bed storage', -300, -4540, 1680, 700, 420, 0x8b5e34, .70, '');
+
+      const title = makeLabel('Living quarters: toilet/shower · bed · closets · kitchen', '#e5e7eb', 'rgba(15,23,42,.82)');
+      title.position.set(0, .12, m(livingFront + 180));
+      scene.add(title);
+    }
+
+
     addTruckGeometry();
+    addLivingGeometry();
 
     function resize(){
       const rect = canvas.parentElement.getBoundingClientRect();
@@ -305,24 +344,71 @@
     resize();
 
     function getCat(id){ return catalog.find(i=>i.id===id); }
-    function baseDimsFor(obj){
-      const item = getCat(obj.catalogId);
-      return obj.customDims || item.dims;
+    function serviceBoxLayout(item){
+      if(!item.serviceBoxes) return [];
+      if(item.id === 'bjorndalen_hbot'){
+        // Compact end-mounted bank seen on video: two tall boxes beside each other, one low box above them.
+        // The boxes stay inside the 960 mm chamber width.
+        const gap = 20;
+        const lowerWidth = 425 + gap + 420;
+        const leftX = -lowerWidth / 2;
+        return [
+          {box:item.serviceBoxes[1], depth:655, width:425, height:940, x:leftX + 425/2, z:655/2, y:940/2},
+          {box:item.serviceBoxes[2], depth:680, width:420, height:760, x:leftX + 425 + gap + 420/2, z:680/2, y:760/2},
+          {box:item.serviceBoxes[0], depth:510, width:590, height:380, x:0, z:510/2, y:940 + 380/2}
+        ];
+      }
+      return item.serviceBoxes.map(b=>({box:b, depth:b.dims[0], width:b.dims[1], height:b.dims[2], x:0, z:b.dims[0]/2, y:b.dims[2]/2}));
+    }
+    function serviceBankDepth(item){
+      const layout = serviceBoxLayout(item);
+      return layout.length ? Math.max(...layout.map(b=>b.z + b.depth/2)) : 0;
+    }
+    function serviceBankWidth(item){
+      const layout = serviceBoxLayout(item);
+      return layout.length ? Math.max(...layout.map(b=>Math.abs(b.x) + b.width/2))*2 : 0;
+    }
+    function serviceBankHeight(item){
+      const layout = serviceBoxLayout(item);
+      return layout.length ? Math.max(...layout.map(b=>b.y + b.height/2)) : 0;
     }
     function getDims(obj){
-      const [L,W,H] = baseDimsFor(obj);
+      const item = getCat(obj.catalogId);
+      let [L,W,H] = item.dims;
+      if(item.id === 'shelves' && obj.customDims){ [L,W,H] = obj.customDims; }
+      if(item.shape === 'archedChamber'){
+        const totalL = L + serviceBankDepth(item);
+        const totalW = Math.max(W, serviceBankWidth(item));
+        const totalH = Math.max(H, serviceBankHeight(item));
+        if(obj.rot % 180 === 0) return {x: totalW, z: totalL, h: totalH, archedBody:{L,W,H}, serviceDepth:serviceBankDepth(item), serviceWidth:serviceBankWidth(item)};
+        return {x: totalL, z: totalW, h: totalH, archedBody:{L,W,H}, serviceDepth:serviceBankDepth(item), serviceWidth:serviceBankWidth(item)};
+      }
+      if(item.category === 'Hyperbaric Chamber' || item.shape === 'cylinder'){
+        const diameter = Math.max(W,H);
+        if(obj.rot % 180 === 0) return {x: diameter, z: L, h: diameter, cylinderDiameter:diameter, cylinderLength:L};
+        return {x: L, z: diameter, h: diameter, cylinderDiameter:diameter, cylinderLength:L};
+      }
       if(obj.rot % 180 === 0) return {x: W, z: L, h: H};
       return {x: L, z: W, h: H};
     }
+    function yRange(obj){
+      const d = getDims(obj);
+      const yBase = obj.mountHigh ? Math.max(0, TRUCK.height - d.h - 40) : 0;
+      return {y1:yBase, y2:yBase + d.h};
+    }
     function bbox(obj){
       const d = getDims(obj);
-      return {x1: obj.x - d.x/2, x2: obj.x + d.x/2, z1: obj.z - d.z/2, z2: obj.z + d.z/2};
+      const y = yRange(obj);
+      return {x1: obj.x - d.x/2, x2: obj.x + d.x/2, z1: obj.z - d.z/2, z2: obj.z + d.z/2, y1:y.y1, y2:y.y2};
     }
     function overlaps(a,b, pad=0){
       return !(a.x2+pad <= b.x1 || a.x1-pad >= b.x2 || a.z2+pad <= b.z1 || a.z1-pad >= b.z2);
     }
+    function overlaps3D(a,b,pad=0){
+      return overlaps(a,b,pad) && !(a.y2 <= b.y1 || a.y1 >= b.y2);
+    }
     function withinTruck(b){
-      return b.x1 >= -TRUCK.width/2 + MARGIN && b.x2 <= TRUCK.width/2 - MARGIN && b.z1 >= -TRUCK.length/2 + MARGIN && b.z2 <= TRUCK.length/2 - MARGIN;
+      return b.x1 >= -TRUCK.width/2 + MARGIN && b.x2 <= TRUCK.width/2 - MARGIN && b.z1 >= -TRUCK.length/2 + MARGIN && b.z2 <= TRUCK.length/2 - MARGIN && b.y1 >= 0 && b.y2 <= TRUCK.height + 1;
     }
     function validate(obj, ignoreId=null){
       if(obj.insideChamber) return {valid:true, warnings:['Stored inside hyperbaric chamber; no floor footprint counted.']};
@@ -333,16 +419,7 @@
       if(!withinTruck(b)){ valid = false; warnings.push('Outside truck interior envelope.'); }
       if(overlaps(b, DOOR, 0)){ valid = false; warnings.push('Blocks the front door clearance zone.'); }
       if(overlaps(b, REAR_CAUTION, 0)){ warnings.push('In rear loading caution zone; keep removable or verify loading workflow.'); }
-      const d = getDims(obj);
-      if(d.h > TRUCK.height){
-        warnings.push(`Height ${d.h} mm exceeds ${TRUCK.height} mm ceiling.`);
-        if(item.category !== 'Cable Strength Training Tower') valid = false;
-        else warnings.push('Cable tower is kept placeable so ceiling increase or tower-height reduction can be studied.');
-      }
-      if(item.category === 'Hyperbaric Chamber' && item.id === 'hpo_zeugma'){
-        warnings.push('Manufacturer minimum installation floor 5500 × 2800 mm exceeds this truck; likely not feasible.');
-        valid = false;
-      }
+      if(b.y2 > TRUCK.height){ warnings.push(`Height envelope reaches ${Math.round(b.y2)} mm, above ${TRUCK.height} mm ceiling.`); if(item.category !== 'Cable Strength Training Tower') valid = false; }
       if(item.wallMounted){
         const nearLeft = Math.abs(b.x1 + TRUCK.width/2) <= 140;
         const nearRight = Math.abs(b.x2 - TRUCK.width/2) <= 140;
@@ -354,7 +431,7 @@
       }
       for(const other of placed){
         if(other.id===obj.id || other.id===ignoreId || other.insideChamber) continue;
-        if(overlaps(b, bbox(other), 25)){ valid = false; warnings.push(`Overlaps with ${getCat(other.catalogId).name}.`); break; }
+        if(overlaps3D(b, bbox(other), 25)){ valid = false; warnings.push(`Overlaps with ${getCat(other.catalogId).name}.`); break; }
       }
       return {valid,warnings};
     }
@@ -364,7 +441,13 @@
       const id = nextId++;
       const obj = {id, catalogId:catId, x:0, z:0, rot:0, insideChamber:false};
       if(item.id === 'shelves') obj.customDims = [...item.dims];
-      if(item.wallMounted){ obj.x = TRUCK.width/2 - item.dims[1]/2 - 35; obj.z = -600 + placed.filter(o=>getCat(o.catalogId).wallMounted).length*650; }
+      if(item.wallMounted){
+        obj.mountHigh = true;
+        const wallCount = placed.filter(o=>getCat(o.catalogId).wallMounted).length;
+        obj.x = options.x ?? (TRUCK.width/2 - item.dims[1]/2 - 35);
+        obj.z = options.z ?? (-1280 + wallCount*760);
+        obj.rot = options.rot ?? 0;
+      }
       else { obj.x = options.x ?? 0; obj.z = options.z ?? 0; }
       if(item.canInsideHyperbaric && options.insideChamber){ obj.insideChamber = true; }
       placed.push(obj);
@@ -392,77 +475,120 @@
       else alert('Add a hyperbaric chamber first.');
     }
 
-    function makeIconSprite(text, color='#38bdf8'){
-      const c = document.createElement('canvas');
-      c.width = 192; c.height = 192;
-      const ctx = c.getContext('2d');
-      ctx.beginPath(); ctx.arc(96,96,76,0,Math.PI*2); ctx.fillStyle='rgba(15,23,42,.94)'; ctx.fill();
-      ctx.lineWidth=10; ctx.strokeStyle=color; ctx.stroke();
-      ctx.fillStyle='#e5e7eb'; ctx.font='bold 44px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(text.slice(0,3),96,96);
-      const tex = new THREE.CanvasTexture(c);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
-      sp.scale.set(.18,.18,1);
-      sp.raycast = () => {};
-      return sp;
+    function createArchedPrismGeometry(widthMm, heightMm, lengthMm){
+      const W = m(widthMm);
+      const H = m(heightMm);
+      const L = m(lengthMm);
+      const r = W / 2;
+      const shoulderY = Math.max(r, H - r);
+      const shape = new THREE.Shape();
+      shape.moveTo(-W/2, 0);
+      shape.lineTo(-W/2, shoulderY);
+      shape.absarc(0, shoulderY, r, Math.PI, 0, true);
+      shape.lineTo(W/2, 0);
+      shape.lineTo(-W/2, 0);
+      const geo = new THREE.ExtrudeGeometry(shape, {depth:L, bevelEnabled:false, steps:1});
+      geo.translate(0, 0, -L/2);
+      return geo;
     }
 
-    function shouldRedLight(obj){
-      const item = getCat(obj.catalogId);
-      return item.category === 'Cable Strength Training Tower' && getDims(obj).h > TRUCK.height;
+    function addEdgesTo(mesh, color=0xe5e7eb, opacity=.65){
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color, transparent:true, opacity}));
+      mesh.add(edges);
+      return edges;
+    }
+
+    function createArchedChamberGroup(obj, item, d, v, color){
+      const [bodyL, bodyW, bodyH] = item.dims;
+      const serviceDepth = serviceBankDepth(item);
+      const serviceWidth = serviceBankWidth(item);
+      const totalL = bodyL + serviceDepth;
+      const totalW = Math.max(bodyW, serviceWidth);
+      const group = new THREE.Group();
+      group.userData.objId = obj.id;
+      meshToId.set(group.uuid, obj.id);
+      group.position.set(m(obj.x), 0, m(obj.z));
+      if(obj.rot % 180 === 90) group.rotation.y = Math.PI/2;
+
+      const body = new THREE.Mesh(createArchedPrismGeometry(bodyW, bodyH, bodyL), mat(color, v.valid ? .62 : .82));
+      body.position.z = -m(serviceDepth/2);
+      body.userData.objId = obj.id;
+      addEdgesTo(body, v.valid ? 0xe5e7eb : 0xffffff, .65);
+      group.add(body);
+
+      const boxMaterial = mat(0x94a3b8, .82);
+      const chamberEndZ = (bodyL - serviceDepth) / 2;
+      for(const spec of serviceBoxLayout(item)){
+        const b = spec.box;
+        const {depth, width, height} = spec;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(m(width), m(height), m(depth)), boxMaterial.clone());
+        // End-mounted compact bank: all service boxes are kept within the chamber width.
+        box.position.set(m(spec.x), m(spec.y), m(chamberEndZ + spec.z));
+        box.userData.objId = obj.id;
+        addEdgesTo(box, 0xf8fafc, .7);
+        group.add(box);
+        const bLabel = makeLabel(b.name.replace('Compressor / ', '').slice(0,18), '#0f172a', 'rgba(255,255,255,.74)');
+        bLabel.position.set(0, m(height/2)+.08, 0);
+        box.add(bLabel);
+      }
+
+      const label = makeLabel((roleIcon(item.category)+' '+item.name).replace(/\s+/g,' ').slice(0,26), '#fff', v.valid ? 'rgba(15,23,42,.76)' : 'rgba(127,29,29,.85)');
+      label.position.set(0, m(d.h)+.12, 0);
+      group.add(label);
+
+      if(obj.id===selectedId){
+        const sel = new THREE.Mesh(new THREE.BoxGeometry(m(totalW+70), .03, m(totalL+70)), mat(0x38bdf8,.35));
+        sel.position.y = .035;
+        group.add(sel);
+      }
+      if(v.warnings.some(w=>w.toLowerCase().includes('height'))){
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(.045, 16, 16), new THREE.MeshBasicMaterial({color:0xff0000}));
+        lamp.position.set(0, m(d.h)+.17, 0);
+        group.add(lamp);
+      }
+      return group;
     }
 
     function createMeshFor(obj){
       const item = getCat(obj.catalogId);
       const d = getDims(obj);
+      const yr = yRange(obj);
       const color = new THREE.Color(categoryColor.get(item.category) || '#94a3b8');
       const v = validate(obj);
-      const redLight = shouldRedLight(obj);
       if(!v.valid) color.set('#ef4444');
       let mesh;
-      if(item.shape==='cylinder' || item.category === 'Hyperbaric Chamber'){
-        // Cylinder dimensions are treated as the extreme envelope: length × diameter/width × height.
-        // The bounding box remains conservative for collision checking, while the visual body is cylindrical.
-        const geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 56, 1, false);
-        geo.rotateX(Math.PI/2); // local cylinder axis along Z; scale = width × height × length
-        mesh = new THREE.Mesh(geo, mat(color, v.valid ? .72 : .85));
-        mesh.scale.set(m(d.x), m(d.h), m(d.z));
-        mesh.position.set(m(obj.x), m(d.h/2), m(obj.z));
+      if(item.shape === 'archedChamber'){
+        return createArchedChamberGroup(obj, item, d, v, color);
+      }
+      if(item.category === 'Hyperbaric Chamber' || item.shape==='cylinder'){
+        const diameter = d.cylinderDiameter || Math.max(item.dims[1], item.dims[2]);
+        const length = d.cylinderLength || item.dims[0];
+        const geo = new THREE.CylinderGeometry(m(diameter/2), m(diameter/2), m(length), 40, 1, false);
+        mesh = new THREE.Mesh(geo, mat(color, v.valid ? .62 : .82));
+        mesh.rotation.x = Math.PI/2;
+        if(obj.rot%180===90) mesh.rotation.z = Math.PI/2;
+        mesh.position.set(m(obj.x), m(yr.y1 + diameter/2), m(obj.z));
       } else {
         const geo = new THREE.BoxGeometry(m(d.x), m(d.h), m(d.z));
         mesh = new THREE.Mesh(geo, mat(color, v.valid ? .70 : .86));
-        mesh.position.set(m(obj.x), m(d.h/2), m(obj.z));
+        mesh.position.set(m(obj.x), m(yr.y1 + d.h/2), m(obj.z));
       }
       mesh.userData.objId = obj.id;
-      mesh.userData.pickable = true;
       meshToId.set(mesh.uuid, obj.id);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color: redLight ? 0xef4444 : (v.valid ? 0xe5e7eb : 0xffffff), transparent:true, opacity:redLight ? .95 : .65}));
-      edges.raycast = () => {};
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({color: v.valid ? 0xe5e7eb : 0xffffff, transparent:true, opacity:.65}));
       mesh.add(edges);
-      const label = makeLabel(item.name.replace(/\s+/g,' ').slice(0,24), '#fff', v.valid ? 'rgba(15,23,42,.76)' : 'rgba(127,29,29,.85)');
-      label.position.set(0, m(d.h)+.11, 0);
-      label.raycast = () => {};
+      const label = makeLabel((roleIcon(item.category)+' '+item.name).replace(/\s+/g,' ').slice(0,26), '#fff', v.valid ? 'rgba(15,23,42,.76)' : 'rgba(127,29,29,.85)');
+      label.position.set(0, m(d.h/2)+.11, 0);
       mesh.add(label);
-      const icon = makeIconSprite(roleIcon(item), categoryColor.get(item.category) || '#94a3b8');
-      icon.position.set(-m(d.x/2)-.05, m(Math.min(d.h,TRUCK.height))+.18, -m(d.z/2)-.05);
-      mesh.add(icon);
-      if(redLight){
-        const haloGeo = new THREE.SphereGeometry(.095, 24, 12);
-        const haloMat = new THREE.MeshStandardMaterial({color:0xef4444, emissive:0xef4444, emissiveIntensity:1.8, transparent:true, opacity:.9});
-        const halo = new THREE.Mesh(haloGeo, haloMat);
-        halo.position.set(0, m(TRUCK.height)+.18, 0);
-        halo.raycast = () => {};
-        mesh.add(halo);
-        const light = new THREE.PointLight(0xef4444, .85, 1.6);
-        light.position.copy(halo.position);
-        light.raycast = () => {};
-        mesh.add(light);
-      }
       if(obj.id===selectedId){
         const sel = new THREE.Mesh(new THREE.BoxGeometry(m(d.x+70), .03, m(d.z+70)), mat(0x38bdf8,.35));
         sel.position.y = -m(d.h/2)+.035;
-        sel.raycast = () => {};
         mesh.add(sel);
+      }
+      if(v.warnings.some(w=>w.toLowerCase().includes('height'))){
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(.045, 16, 16), new THREE.MeshBasicMaterial({color:0xff0000}));
+        lamp.position.set(0, m(d.h/2)+.17, 0);
+        mesh.add(lamp);
       }
       return mesh;
     }
@@ -491,11 +617,11 @@
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-      // Non-recursive picking intentionally ignores labels, icons, selector plates and warning lights.
-      // This prevents the common bug where a nearby label/icon belongs to another object and the wrong item moves.
-      const hits = raycaster.intersectObjects(equipmentGroup.children, false);
+      const hits = raycaster.intersectObjects(equipmentGroup.children, true);
       for(const hit of hits){
-        if(hit.object?.userData?.objId) return hit.object.userData.objId;
+        let node = hit.object;
+        while(node && !node.userData.objId) node = node.parent;
+        if(node?.userData.objId) return node.userData.objId;
       }
       return null;
     }
@@ -504,37 +630,54 @@
       const id = pointerIntersects(e);
       if(!id) return;
       const obj = placed.find(o=>o.id===id); if(!obj) return;
-      selectedId = id;
-      draggingId = id;
-      renderPanels(); rebuildMeshes();
+      selectedId = id; renderPanels(); rebuildMeshes();
       const p = pointerToGround(e); if(!p) return;
       dragStart = {x:obj.x,z:obj.z};
       dragOffset.set(m(obj.x)-p.x, 0, m(obj.z)-p.z);
       dragging = true; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
     });
     renderer.domElement.addEventListener('pointermove', e=>{
-      if(!dragging || draggingId==null) return;
-      const obj = placed.find(o=>o.id===draggingId); if(!obj) return;
+      if(!dragging || selectedId==null) return;
+      const obj = placed.find(o=>o.id===selectedId); if(!obj) return;
       const p = pointerToGround(e); if(!p) return;
       obj.x = Math.round((p.x + dragOffset.x)/SCALE/10)*10;
       obj.z = Math.round((p.z + dragOffset.z)/SCALE/10)*10;
-      selectedId = draggingId;
       rebuildMeshes(); renderPanels(false);
     });
     renderer.domElement.addEventListener('pointerup', e=>{
       if(!dragging) return;
-      const obj = placed.find(o=>o.id===draggingId);
+      const obj = placed.find(o=>o.id===selectedId);
       if(obj){
         const v = validate(obj);
         if(!v.valid && dragStart){ obj.x = dragStart.x; obj.z = dragStart.z; }
       }
-      dragging=false; draggingId=null; controls.enabled=true; dragStart=null; rebuildMeshes(); renderPanels();
+      dragging=false; controls.enabled=true; dragStart=null; rebuildMeshes(); renderPanels();
     });
+
+
+    function roleIcon(category){
+      const map = {
+        'Hyperbaric Chamber':'🫧',
+        'Treadmill':'🏃',
+        'Cable Strength Training Tower':'💪',
+        'Shelves':'▦',
+        'Indoor cycling bike':'🚴',
+        'IR Capsule':'♨️',
+        'Portable gas analyzer':'🫁',
+        'Local cryotherapy device':'❄️',
+        'Pneumatic compression device':'🦵',
+        'Yoga Mat and Bodyweight Strength Training':'🧘',
+        'Hypoxicator':'⛰️',
+        'Ski ergometer':'🎿',
+        'Neuromuscular Compact Platform':'⚡'
+      };
+      return map[category] || '◼';
+    }
 
     function iconSvg(item){
       const color = categoryColor.get(item.category) || '#94a3b8';
-      const initials = roleIcon(item);
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" rx="20" fill="#0f172a"/><rect x="8" y="8" width="104" height="104" rx="18" fill="${color}" opacity=".22" stroke="${color}" stroke-width="3"/><text x="60" y="55" font-family="Arial" font-size="28" font-weight="700" text-anchor="middle" fill="#e5e7eb">${initials}</text><text x="60" y="82" font-family="Arial" font-size="11" text-anchor="middle" fill="#cbd5e1">role icon</text></svg>`;
+      const icon = roleIcon(item.category);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" rx="20" fill="#0f172a"/><rect x="8" y="8" width="104" height="104" rx="18" fill="${color}" opacity=".22" stroke="${color}" stroke-width="3"/><text x="60" y="62" font-family="Arial" font-size="38" font-weight="700" text-anchor="middle" fill="#e5e7eb">${icon}</text><text x="60" y="91" font-family="Arial" font-size="10" text-anchor="middle" fill="#cbd5e1">role icon</text></svg>`;
       return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     }
 
@@ -569,31 +712,35 @@
     }
     function itemWarnings(item){
       const arr=[];
-      if(item.dims[2] > TRUCK.height) arr.push({type:item.category==='Cable Strength Training Tower'?'warn':'bad',text:item.category==='Cable Strength Training Tower'?'over ceiling / study fit':'over ceiling'});
+      if(item.dims[2] > TRUCK.height) arr.push({type:item.category==='Cable Strength Training Tower'?'warn':'bad',text:'over ceiling'});
       if(item.wallMounted) arr.push({type:'warn',text:'wall-mounted'});
       if(item.canInsideHyperbaric) arr.push({type:'good',text:'can store inside HBOT'});
       if(item.priceUsd==null) arr.push({type:'warn',text:'quote needed'});
       if(item.notes && /estimated|requires|exceeds|interprets|confirm/i.test(item.notes)) arr.push({type:'warn',text:'assumption'});
       return arr;
     }
-    function dimsText(item){ return `${item.dims[0]} × ${item.dims[1]} × ${item.dims[2]} mm${item.category==='Hyperbaric Chamber'?' cylindrical envelope':''}`; }
+    function dimsText(item){
+      if(item.shape === 'archedChamber'){
+        const boxes = (item.serviceBoxes || []).map(b=>`${b.dims[0]}×${b.dims[1]}×${b.dims[2]}`).join('; ');
+        return `body ${item.dims[0]} × ${item.dims[1]} × ${item.dims[2]} mm + end boxes ${boxes} mm`;
+      }
+      return `${item.dims[0]} × ${item.dims[1]} × ${item.dims[2]} mm`;
+    }
 
-    function shelfEditorHtml(obj){
+
+    function shelfControlHtml(obj){
       const dims = obj.customDims || getCat(obj.catalogId).dims;
-      return `<div class="dimension-editor">
-        <label>Length along truck, mm<br><span class="mini">300–4000, can run nearly full truck length</span></label><input data-shelfdim="L" data-id="${obj.id}" type="number" min="300" max="4000" step="50" value="${Math.round(dims[0])}">
-        <label>Width across truck, mm<br><span class="mini">200–2360</span></label><input data-shelfdim="W" data-id="${obj.id}" type="number" min="200" max="2360" step="50" value="${Math.round(dims[1])}">
-        <label>Height, mm<br><span class="mini">200–2000</span></label><input data-shelfdim="H" data-id="${obj.id}" type="number" min="200" max="2000" step="50" value="${Math.round(dims[2])}">
+      return `<div class="mini" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:6px 0">
+        <label>L <input data-shelf-l="${obj.id}" type="number" min="300" max="4000" step="50" value="${Math.round(dims[0])}" style="width:100%;background:#0b1220;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:5px"></label>
+        <label>W <input data-shelf-w="${obj.id}" type="number" min="200" max="2360" step="50" value="${Math.round(dims[1])}" style="width:100%;background:#0b1220;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:5px"></label>
+        <label>H <input data-shelf-h="${obj.id}" type="number" min="200" max="2100" step="50" value="${Math.round(dims[2])}" style="width:100%;background:#0b1220;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:5px"></label>
       </div>`;
     }
-    function updateShelfDim(id, dimKey, rawValue){
+    function updateShelfDim(id, idx, value){
       const obj = placed.find(o=>o.id===id); if(!obj) return;
-      const item = getCat(obj.catalogId); if(item.id !== 'shelves') return;
-      const idx = dimKey==='L' ? 0 : dimKey==='W' ? 1 : 2;
-      const limits = [[300,4000],[200,2360],[200,2000]][idx];
-      const val = Math.max(limits[0], Math.min(limits[1], Number(rawValue) || item.dims[idx]));
-      obj.customDims = obj.customDims || [...item.dims];
-      obj.customDims[idx] = val;
+      if(!obj.customDims) obj.customDims = [...getCat(obj.catalogId).dims];
+      const mins = [300,200,200], maxs = [4000,2360,TRUCK.height];
+      obj.customDims[idx] = Math.max(mins[idx], Math.min(maxs[idx], Number(value)||mins[idx]));
       rebuildMeshes(); renderPanels();
     }
 
@@ -609,11 +756,11 @@
         card.className = 'placed-card' + (obj.id===selectedId?' selected':'') + (obj.insideChamber?' inside':'');
         const d = getDims(obj);
         card.innerHTML = `
-          <div class="split"><h3><span class="role-badge">${escapeHtml(roleIcon(item))}</span>${escapeHtml(item.name)}</h3><span class="mini">#${obj.id}</span></div>
-          <div class="mini">${escapeHtml(item.category)} · footprint ${Math.round(d.x)} × ${Math.round(d.z)} mm · height ${Math.round(d.h)} mm${item.category==='Hyperbaric Chamber'?' · cylindrical envelope':''}</div>
-          <div class="mini">x ${Math.round(obj.x)} · z ${Math.round(obj.z)} · rot ${obj.rot}° ${obj.insideChamber?'· stored inside HBOT':''}</div>
+          <div class="split"><h3>${roleIcon(item.category)} ${escapeHtml(item.name)}</h3><span class="mini">#${obj.id}</span></div>
+          <div class="mini">${escapeHtml(item.category)} · footprint ${Math.round(d.x)} × ${Math.round(d.z)} mm · height ${Math.round(d.h)} mm</div>
+          <div class="mini">x ${Math.round(obj.x)} · z ${Math.round(obj.z)} · rot ${obj.rot}° ${obj.mountHigh?'· under-ceiling wall mount':''} ${obj.insideChamber?'· stored inside HBOT':''}</div>
+          ${item.id==='shelves'?shelfControlHtml(obj):''}
           <div>${v.valid?'<span class="flag good">valid</span>':'<span class="flag bad">invalid</span>'}${v.warnings.map(w=>`<span class="flag ${v.valid?'warn':'bad'}">${escapeHtml(w)}</span>`).join('')}</div>
-          ${item.id==='shelves'?shelfEditorHtml(obj):''}
           <div class="btnrow">
             <button data-select="${obj.id}">Select</button>
             <button data-rotate="${obj.id}">Rotate 90°</button>
@@ -626,7 +773,9 @@
       root.querySelectorAll('[data-rotate]').forEach(btn=>btn.addEventListener('click',()=>rotateItem(Number(btn.dataset.rotate))));
       root.querySelectorAll('[data-remove]').forEach(btn=>btn.addEventListener('click',()=>removeItem(Number(btn.dataset.remove))));
       root.querySelectorAll('[data-inside]').forEach(btn=>btn.addEventListener('click',()=>toggleInside(Number(btn.dataset.inside))));
-      root.querySelectorAll('[data-shelfdim]').forEach(inp=>inp.addEventListener('change',()=>updateShelfDim(Number(inp.dataset.id), inp.dataset.shelfdim, inp.value)));
+      root.querySelectorAll('[data-shelf-l]').forEach(inp=>inp.addEventListener('change',()=>updateShelfDim(Number(inp.dataset.shelfL),0,inp.value)));
+      root.querySelectorAll('[data-shelf-w]').forEach(inp=>inp.addEventListener('change',()=>updateShelfDim(Number(inp.dataset.shelfW),1,inp.value)));
+      root.querySelectorAll('[data-shelf-h]').forEach(inp=>inp.addEventListener('change',()=>updateShelfDim(Number(inp.dataset.shelfH),2,inp.value)));
     }
 
     function renderSummary(){
@@ -654,7 +803,7 @@
     function doorClearanceOK(){ return placed.filter(o=>!o.insideChamber).every(o=>!overlaps(bbox(o), DOOR, 0)); }
 
     function updateStatus(){
-      if(!placed.length){ document.getElementById('statusLine').textContent='No equipment installed yet.'; return; }
+      if(!placed.length){ document.getElementById('statusLine').textContent='No sports equipment installed yet. Living quarters are shown as fixed reference geometry.'; return; }
       const invalids = placed.filter(o=>!validate(o).valid);
       const warns = placed.flatMap(o=>validate(o).warnings.map(w=>`${getCat(o.catalogId).name}: ${w}`));
       const msg = invalids.length ? `${invalids.length} item(s) invalid. ${warns.slice(0,2).join(' ')}` : `Layout valid. ${warns.length ? 'Warnings: '+warns.slice(0,2).join(' ') : 'No warnings.'}`;
@@ -666,11 +815,12 @@
       const item = getCat(catId);
       const modal = document.getElementById('modal');
       modal.innerHTML = `
-        <div class="split"><h2>${escapeHtml(item.name)}</h2><button id="modalClose">Close</button></div>
+        <div class="split"><h2>${roleIcon(item.category)} ${escapeHtml(item.name)}</h2><button id="modalClose">Close</button></div>
         <div>${itemWarnings(item).map(w=>`<span class="flag ${w.type}">${escapeHtml(w.text)}</span>`).join('')}</div>
         <table>
           <tr><td>Category</td><td>${escapeHtml(item.category)}</td></tr>
           <tr><td>Dimensions</td><td>${dimsText(item)}</td></tr>
+          ${item.serviceBoxes?`<tr><td>Service boxes</td><td>${item.serviceBoxes.map(b=>`${escapeHtml(b.name)}: ${b.dims[0]} × ${b.dims[1]} × ${b.dims[2]} mm`).join('<br>')}</td></tr>`:''}
           <tr><td>Weight</td><td>${item.weightKg==null?'TBD / custom quote needed':item.weightKg+' kg'}</td></tr>
           <tr><td>Energy requirement</td><td>${item.powerW==null?'TBD from distributor':item.powerW===0?'Autonomous / no mains power for operation':item.powerW+' W estimated/nominal'}</td></tr>
           <tr><td>Price</td><td>${escapeHtml(item.priceLabel||'TBD')}</td></tr>
@@ -699,9 +849,9 @@
     function autoArrange(){
       const active = placed.filter(o=>!o.insideChamber);
       // Place wall-mounted first along the right wall, avoiding the rear loading wall and front door.
-      let wallZ = -1050;
+      let wallZ = -1350;
       for(const obj of active.filter(o=>getCat(o.catalogId).wallMounted)){
-        const item = getCat(obj.catalogId); obj.rot=0; obj.x = TRUCK.width/2 - item.dims[1]/2 - 40; obj.z = wallZ; wallZ += item.dims[0] + 220;
+        const item = getCat(obj.catalogId); obj.rot=0; obj.mountHigh = true; obj.x = TRUCK.width/2 - item.dims[1]/2 - 40; obj.z = wallZ; wallZ += Math.max(item.dims[0], 730) + 220;
       }
       const floorObjs = active.filter(o=>!getCat(o.catalogId).wallMounted).sort((a,b)=>{
         const da=getDims(a), db=getDims(b); return (db.x*db.z)-(da.x*da.z);
@@ -742,7 +892,7 @@
 
     function loadCompactPack(){
       placed = []; nextId = 1; selectedId = null;
-      ['oxyrevo_quest36','assault_treadmill','wattbike_atom','zimmer_cryo6','hypoxico','shelves','ercolina_ski','vald_forcedecks_mini','cosmed_k5','sunlighten_solo','normatec3'].forEach(id=>{
+      ['oxyrevo_quest36','assault_treadmill','wattbike_atom','zimmer_cryo6','hypoxico','shelves','ercolina_ski','ercolina_ski','vald_forcedecks_mini','cosmed_k5','sunlighten_solo','normatec3'].forEach(id=>{
         const inside = ['sunlighten_solo','normatec3'].includes(id);
         addItem(id,{insideChamber:inside});
       });
@@ -752,8 +902,9 @@
     function exportLayout(){
       const data = {
         truck:TRUCK,
-        door:{leftOffset:688,width:688,rightOffset:984,clearanceDepth:900},
-        placed:placed.map(o=>({id:o.id,catalogId:o.catalogId,name:getCat(o.catalogId).name,category:getCat(o.catalogId).category,x_mm:o.x,z_mm:o.z,rotation_deg:o.rot,customDims_mm:o.customDims||null,insideHyperbaric:o.insideChamber,valid:validate(o).valid,warnings:validate(o).warnings}))
+        door:{leftOffset:688,width:984,rightOffset:688,clearanceDepth:900},
+        livingQuarters:{length:LIVING.length,width:LIVING.width,height:LIVING.height,fixtures:['toilet + shower','raised bed','closets','kitchen']},
+        placed:placed.map(o=>({id:o.id,catalogId:o.catalogId,name:getCat(o.catalogId).name,category:getCat(o.catalogId).category,x_mm:o.x,z_mm:o.z,rotation_deg:o.rot,mountHigh:!!o.mountHigh,customDims:o.customDims||null,serviceBoxes:getCat(o.catalogId).serviceBoxes||null,insideHyperbaric:o.insideChamber,valid:validate(o).valid,warnings:validate(o).warnings}))
       };
       const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
       const url = URL.createObjectURL(blob);
@@ -764,7 +915,7 @@
 
     document.getElementById('autoArrange').addEventListener('click', autoArrange);
     document.getElementById('loadPack').addEventListener('click', loadCompactPack);
-    document.getElementById('clearAll').addEventListener('click', ()=>{placed=[];selectedId=null;nextId=1;rebuildMeshes();renderPanels();});
+    document.getElementById('clearAll').addEventListener('click', ()=>{placed=[];selectedId=null;rebuildMeshes();renderPanels();});
     document.getElementById('exportJson').addEventListener('click', exportLayout);
 
     populateFilters(); renderCatalog(); renderPanels();
@@ -774,4 +925,3 @@
   </script>
 </body>
 </html>
-
